@@ -1,0 +1,18 @@
+# Uploaded documents
+uploads/*
+!uploads/.gitkeep
+
+# Generated data
+data/*
+!data/.gitkeep
+
+# Java compiled files
+*.class
+
+# Secrets and environment variables
+.env
+.env.*
+
+# IDE files
+.idea/
+.vscode/

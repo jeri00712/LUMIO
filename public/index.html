@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Academic GPA & CGPA Calculator</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%93%3C/text%3E%3C/svg%3E">
+    <link rel="stylesheet" href="/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- Header Navigation -->
+    <header class="navbar">
+        <div class="nav-container">
+            <div class="logo">
+                <span class="logo-icon">🎓</span>
+                <div class="logo-text">
+                    <h1>LUMIO</h1>
+                    <p>Academic Performance Platform</p>
+                </div>
+            </div>
+            
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main-container" id="main-content">
+
+        <!-- Tab Switcher Navigation -->
+        <div class="tab-nav" role="tablist" aria-label="Calculator sections">
+            <button type="button" class="tab-btn active" id="tabGpaBtn" role="tab" aria-selected="true" aria-controls="gpaTabSection">
+                <span class="tab-icon">📘</span> Semester GPA
+            </button>
+            <button type="button" class="tab-btn" id="tabCgpaBtn" role="tab" aria-selected="false" tabindex="-1" aria-controls="cgpaTabSection">
+                <span class="tab-icon">📊</span> Cumulative CGPA
+            </button>
+            <button type="button" class="tab-btn" id="tabHistoryBtn" role="tab" aria-selected="false" tabindex="-1" aria-controls="historyTabSection">
+                <span class="tab-icon">📜</span> Semester History
+            </button>
+<button type="button" class="tab-btn" id="tabUploadBtn" role="tab" aria-selected="false" tabindex="-1" aria-controls="uploadTabSection">
+                <span class="tab-icon">📄</span> Marksheet Upload
+            </button>
+        </div>
+
+        <!-- ==================================================== -->
+        <!-- TAB 1: SEMESTER GPA CALCULATOR -->
+        <!-- ==================================================== -->
+        <div id="gpaTabSection" role="tabpanel" aria-labelledby="tabGpaBtn">
+            <section class="hero">
+                <h2>Semester GPA Calculator</h2>
+                <p>Enter your course details, credits, and grades to calculate your official semester GPA and credit points instantly.</p>
+            </section>
+
+            <section class="calculator-card">
+                <div class="card-header">
+                    <div>
+                        <h3>Course Entry</h3>
+                        <p class="subtitle">Standard 10-Point Scale (S = 10, A+ = 9, A = 8, B+ = 7, B = 6, C = 5, U = 0)</p>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm" id="addSubjectBtn">
+                        + Add Subject
+                    </button>
+                </div>
+
+                <form id="gpaForm">
+                    <div class="table-responsive">
+                        <table class="subjects-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col" style="width: 5%;">#</th>
+                                    <th scope="col" style="width: 45%;">Subject Name</th>
+                                    <th scope="col" style="width: 20%;">Credits</th>
+                                    <th scope="col" style="width: 20%;">Grade</th>
+                                    <th scope="col" style="width: 10%;">Remove</th>
+                                </tr>
+                            </thead>
+                            <tbody id="subjectsBody">
+                                <!-- Dynamic rows populated by app.js -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="resetBtn">Reset</button>
+                        <button type="submit" class="btn btn-primary" id="calculateBtn">
+                            Calculate GPA
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-card" id="resultsSection" style="display: none;">
+                <div class="results-header">
+                    <h3>Semester GPA Report</h3>
+                    <span class="pill pill-success" id="resultStatus">Calculated Successfully</span>
+                </div>
+
+                <div class="metrics-grid">
+                    <div class="metric-card gpa-highlight">
+                        <div class="metric-label">Semester GPA</div>
+                        <div class="metric-value" id="gpaScore">0.00</div>
+                        <div class="metric-sub" id="gpaRemarks">Excellent Performance</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Total Credits</div>
+                        <div class="metric-value" id="totalCredits">0</div>
+                        <div class="metric-sub">Earned registered credits</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Total Credit Points</div>
+                        <div class="metric-value" id="totalPoints">0</div>
+                        <div class="metric-sub">Σ (Credit × Grade Point)</div>
+                    </div>
+                </div>
+
+                <!-- Quick Insights Bar -->
+                <div id="gpaQuickInsights" class="quick-insights-bar">
+                    <div class="insight-badge">🏆 Top: <strong id="quickTopSubject">--</strong></div>
+                    <div class="insight-badge">🎯 Pass Rate: <strong id="quickPassRate">100%</strong></div>
+                    <div class="insight-badge">📈 Distinction Earned: <strong id="quickDistinction">--</strong></div>
+                </div>
+
+                <p id="excludedNote" class="info-note" role="note" style="display: none;"></p>
+
+                <!-- Subject Breakdown Table -->
+                <div class="breakdown-container">
+                    <h4>Course Breakdown</h4>
+                    <table class="breakdown-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Subject</th>
+                                <th scope="col">Credits</th>
+                                <th scope="col">Grade</th>
+                                <th scope="col">Grade Point</th>
+                                <th scope="col">Credit Points</th>
+                            </tr>
+                        </thead>
+                        <tbody id="breakdownBody">
+                            <!-- Populated by app.js -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Save to History Action -->
+                <div class="results-actions">
+                    <div class="save-input-group">
+                        <input type="text" id="semesterSaveTitle" aria-label="Semester title" placeholder="e.g. Semester 1 (Fall 2024)" value="" />
+                        <button type="button" class="btn btn-primary" id="saveGpaToHistoryBtn">
+                            💾 Save to Semester History
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- ==================================================== -->
+        <!-- TAB 2: CUMULATIVE CGPA CALCULATOR -->
+        <!-- ==================================================== -->
+        <div id="cgpaTabSection" role="tabpanel" aria-labelledby="tabCgpaBtn" style="display: none;">
+            <section class="hero">
+                <h2>Cumulative CGPA Calculator</h2>
+                <p>Calculate your overall degree CGPA across multiple semesters using the official credit-weighted formula.</p>
+            </section>
+
+            <section class="calculator-card">
+                <div class="card-header">
+                    <div>
+                        <h3>Semester Records</h3>
+                        <p class="subtitle">Formula: CGPA = Σ(Semester GPA × Credits) / Σ(Credits)</p>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm" id="addSemesterBtn">
+                        + Add Semester
+                    </button>
+                </div>
+
+                <form id="cgpaForm">
+                    <div class="table-responsive">
+                        <table class="subjects-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col" style="width: 8%;">#</th>
+                                    <th scope="col" style="width: 37%;">Semester</th>
+                                    <th scope="col" style="width: 25%;">Semester GPA (0.00 - 10.00)</th>
+                                    <th scope="col" style="width: 20%;">Total Credits</th>
+                                    <th scope="col" style="width: 10%;">Remove</th>
+                                </tr>
+                            </thead>
+                            <tbody id="semestersBody">
+                                <!-- Dynamic rows populated by app.js -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="resetCgpaBtn">Reset</button>
+                        <button type="submit" class="btn btn-primary" id="calculateCgpaBtn">
+                            Calculate CGPA
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- CGPA Results Section -->
+            <section class="results-card" id="cgpaResultsSection" style="display: none;">
+                <div class="results-header">
+                    <h3>Cumulative Degree Report</h3>
+                    <span class="pill pill-success" id="cgpaResultStatus">Calculated Successfully</span>
+                </div>
+
+                <div class="metrics-grid">
+                    <div class="metric-card gpa-highlight">
+                        <div class="metric-label">Cumulative CGPA</div>
+                        <div class="metric-value" id="cgpaScore">0.00</div>
+                        <div class="metric-sub" id="cgpaClassification">First Class with Distinction</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Total Degree Credits</div>
+                        <div class="metric-value" id="cgpaTotalCredits">0</div>
+                        <div class="metric-sub">Cumulative credits earned</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Total Quality Points</div>
+                        <div class="metric-value" id="cgpaTotalPoints">0.00</div>
+                        <div class="metric-sub">Σ (Semester GPA × Credits)</div>
+                    </div>
+                </div>
+
+                <div class="breakdown-container">
+                    <h4>Semester Progression</h4>
+                    <table class="breakdown-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Semester</th>
+                                <th scope="col">Semester GPA</th>
+                                <th scope="col">Credits</th>
+                                <th scope="col">Quality Points</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cgpaBreakdownBody">
+                            <!-- Populated by app.js -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <!-- ==================================================== -->
+        <!-- TAB 3: SEMESTER HISTORY (STEP 5) -->
+        <!-- ==================================================== -->
+        <div id="historyTabSection" role="tabpanel" aria-labelledby="tabHistoryBtn" style="display: none;">
+            <section class="hero">
+                <h2>Semester History & Archives</h2>
+                <p>View your saved semester performance, inspect past subject grades, or auto-transfer all records to calculate Cumulative CGPA.</p>
+            </section>
+
+            <section class="calculator-card">
+                <div class="card-header">
+                    <div>
+                        <h3>Saved Semesters</h3>
+                        <p class="subtitle" id="historySummaryText">Loading your saved history...</p>
+                    </div>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-primary btn-sm" id="syncToCgpaBtn">
+                            ⚡ Transfer to CGPA Calculator
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-sm" id="clearAllHistoryBtn">
+                            Clear All History
+                        </button>
+                    </div>
+                </div>
+
+                <div id="historyCardsContainer" class="history-grid">
+                    <!-- Populated by app.js -->
+                </div>
+
+                <div id="historyEmptyState" class="empty-state" style="display: none;">
+                    <div class="empty-icon">📂</div>
+                    <h4>No Saved Semesters Yet</h4>
+                    <p>Calculate your semester GPA in the first tab and click <strong>"Save to Semester History"</strong> to keep your records permanently stored.</p>
+                    <button type="button" class="btn btn-primary btn-sm" id="goToGpaFromEmptyBtn">Go to GPA Calculator</button>
+                </div>
+            </section>
+        </div>
+
+        <!-- ==================================================== -->
+        <!-- TAB 4: MARKSHEET & TRANSCRIPT UPLOAD -->
+        <!-- ==================================================== -->
+        <div id="uploadTabSection" role="tabpanel" aria-labelledby="tabUploadBtn" style="display: none;">
+            <section class="hero">
+                <h2>Marksheet & Transcript Upload</h2>
+                <p>Upload your result sheet as a PDF to read subjects, credits and grades automatically. Subjects with 0 credits are excluded from the GPA.</p>
+            </section>
+
+            <section class="calculator-card">
+                <div class="card-header">
+                    <div>
+                        <h3>Document Uploader</h3>
+                        <p class="subtitle">PDF marksheets are read automatically. PNG/JPG images are saved but cannot be read, so enter those subjects manually.</p>
+                    </div>
+
+                </div>
+
+                <!-- Drag & Drop Dropzone -->
+                <div class="dropzone" id="marksheetDropzone" role="group" aria-label="Marksheet drop area">
+                    <input type="file" id="marksheetFileInput" aria-label="Choose marksheet file" accept=".pdf,image/png,image/jpeg,image/jpg" style="display: none;" />
+                    <div class="dropzone-icon">📁</div>
+                    <h4>Drag & Drop your marksheet here</h4>
+                    <p>or <button type="button" class="link-btn" id="browseFilesBtn">Browse from device</button></p>
+                    <div class="file-badges">
+                        <span class="file-badge">PDF</span>
+                        <span class="file-badge">PNG</span>
+                        <span class="file-badge">JPG</span>
+                        <span class="file-badge">Max 10MB</span>
+                    </div>
+                </div>
+
+                <!-- Selected File Card (Pending Upload) -->
+                <div id="uploadPreviewCard" class="upload-preview-card" style="display: none;">
+                    <div class="preview-info">
+                        <div class="preview-icon" id="previewIcon">📄</div>
+                        <div>
+                            <strong id="previewFileName">marksheet.pdf</strong>
+                            <div class="preview-meta" id="previewFileMeta">PDF Document • 145 KB</div>
+                        </div>
+                    </div>
+                    <div class="preview-actions">
+                        <button type="button" class="btn btn-secondary btn-sm" id="cancelFileBtn">Cancel</button>
+                        <button type="button" class="btn btn-primary btn-sm" id="uploadFileBtn">
+                            🚀 Upload to Server
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Upload Progress Bar -->
+                <div id="uploadProgressContainer" class="upload-progress-container" style="display: none;">
+                    <div class="progress-bar-track" role="progressbar" aria-label="Upload progress" aria-valuemin="0" aria-valuemax="100">
+                        <div class="progress-bar-fill" id="uploadProgressBar" style="width: 0%;"></div>
+                    </div>
+                    <span id="uploadProgressText" class="progress-text" role="status">Uploading to Java server...</span>
+                </div>
+
+                <!-- Upload Success Card -->
+                <div id="uploadSuccessCard" class="upload-success-card" style="display: none;">
+                    <div class="success-header">
+                        <span class="pill pill-success">✅ Processed</span>
+                        <span class="success-time" id="uploadTimestamp">Just now</span>
+                    </div>
+                    <h4>Marksheet Processed Successfully!</h4>
+                    <p id="uploadSuccessDetails">Your document was uploaded and its text was extracted.</p>
+                </div>
+
+                <div id="extractionCard" class="calculator-card extraction-card" style="display: none;">
+                    <div class="card-header">
+                        <div>
+                            <h3>Extracted Academic Data</h3>
+                            <p class="subtitle">Check the extracted subjects, credits, and grades before calculating GPA.</p>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="subjects-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">#</th>
+                                    <th scope="col">Subject Name</th>
+                                    <th scope="col">Credits</th>
+                                    <th scope="col">Grade</th>
+                                </tr>
+                            </thead>
+                            <tbody id="extractedSubjectsBody"></tbody>
+                        </table>
+                    </div>
+                    <p id="extractionNote" class="info-note" role="note" style="display:none;"></p>
+                    <div id="extractionTextBox" class="extraction-text-box" style="display:none;">
+                        <h4>Extracted Text</h4>
+                        <pre id="extractedText"></pre>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="clearExtractionBtn">Clear</button>
+                        <button type="button" class="btn btn-primary" id="useExtractedDataBtn">Use Data in GPA Calculator</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+</main>
+
+    <script src="/app.js"></script>
+</body>
+</html>
