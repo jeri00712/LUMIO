@@ -118,6 +118,32 @@ function initTabs() {
     if (goToGpaFromEmptyBtn) {
         goToGpaFromEmptyBtn.addEventListener("click", () => switchTab("gpa"));
     }
+
+    // Keyboard: Left/Right/Home/End move between tabs (standard tab pattern).
+    const tabOrder = [[tabGpaBtn, "gpa"], [tabCgpaBtn, "cgpa"], [tabHistoryBtn, "history"], [tabUploadBtn, "upload"]]
+        .filter(([btn]) => btn);
+    tabOrder.forEach(([btn], index) => {
+        btn.addEventListener("keydown", event => {
+            let next = -1;
+            if (event.key === "ArrowRight") next = (index + 1) % tabOrder.length;
+            else if (event.key === "ArrowLeft") next = (index - 1 + tabOrder.length) % tabOrder.length;
+            else if (event.key === "Home") next = 0;
+            else if (event.key === "End") next = tabOrder.length - 1;
+            if (next < 0) return;
+            event.preventDefault();
+            switchTab(tabOrder[next][1]);
+            tabOrder[next][0].focus();
+        });
+    });
+}
+
+// Moves keyboard / screen-reader focus to a results heading so new results are announced.
+function focusResultsHeading(section) {
+    const heading = section && section.querySelector("h3");
+    if (heading) {
+        heading.setAttribute("tabindex", "-1");
+        heading.focus();
+    }
 }
 
 function switchTab(tab) {
@@ -125,6 +151,14 @@ function switchTab(tab) {
     if (tabCgpaBtn) tabCgpaBtn.classList.toggle("active", tab === "cgpa");
     if (tabHistoryBtn) tabHistoryBtn.classList.toggle("active", tab === "history");
     if (tabUploadBtn) tabUploadBtn.classList.toggle("active", tab === "upload");
+
+    // Accessibility: tell assistive technology which tab is selected.
+    [[tabGpaBtn, "gpa"], [tabCgpaBtn, "cgpa"], [tabHistoryBtn, "history"], [tabUploadBtn, "upload"]]
+        .forEach(([btn, name]) => {
+            if (!btn) return;
+            btn.setAttribute("aria-selected", String(tab === name));
+            btn.tabIndex = tab === name ? 0 : -1;
+        });
 
     if (gpaTabSection) {
         gpaTabSection.style.display = tab === "gpa" ? "block" : "none";
@@ -244,6 +278,17 @@ function updateRowIndices() {
         if (span) {
             span.textContent = index + 1;
         }
+
+        // Accessible names: each field announces which subject it belongs to.
+        const n = index + 1;
+        const setLabel = (selector, text) => {
+            const el = row.querySelector(selector);
+            if (el) el.setAttribute("aria-label", text);
+        };
+        setLabel(".sub-name", `Subject ${n} name`);
+        setLabel(".sub-credit", `Subject ${n} credits`);
+        setLabel(".sub-grade", `Subject ${n} grade`);
+        setLabel(".btn-delete", `Remove subject ${n}`);
     });
 }
 
@@ -330,6 +375,22 @@ async function handleGpaFormSubmit(event) {
 
 function displayGpaResults(data) {
     resultsSection.style.display = "block";
+    focusResultsHeading(resultsSection);
+
+    // Zero-credit subjects are excluded by the server; tell the user which ones.
+    const excludedNote = document.getElementById("excludedNote");
+    if (excludedNote) {
+        const excluded = Array.isArray(data.excludedSubjects) ? data.excludedSubjects : [];
+        if (excluded.length > 0) {
+            excludedNote.textContent =
+                "Not counted in GPA (0 credits): " +
+                excluded.map(item => `${item.name} (${item.grade})`).join(", ") + ".";
+            excludedNote.style.display = "block";
+        } else {
+            excludedNote.textContent = "";
+            excludedNote.style.display = "none";
+        }
+    }
 
     document.getElementById("gpaScore").textContent = Number(data.gpa).toFixed(2);
     document.getElementById("totalCredits").textContent = data.totalCredits;
@@ -475,6 +536,16 @@ function updateSemesterIndices() {
         if (span) {
             span.textContent = index + 1;
         }
+
+        const n = index + 1;
+        const setLabel = (selector, text) => {
+            const el = row.querySelector(selector);
+            if (el) el.setAttribute("aria-label", text);
+        };
+        setLabel(".sem-name", `Semester ${n} name`);
+        setLabel(".sem-gpa", `Semester ${n} GPA`);
+        setLabel(".sem-credits", `Semester ${n} credits`);
+        setLabel(".btn-delete", `Remove semester ${n}`);
     });
 }
 
@@ -557,6 +628,7 @@ async function handleCgpaFormSubmit(event) {
 
 function displayCgpaResults(data) {
     cgpaResultsSection.style.display = "block";
+    focusResultsHeading(cgpaResultsSection);
 
     document.getElementById("cgpaScore").textContent = Number(data.cgpa).toFixed(2);
     document.getElementById("cgpaTotalCredits").textContent = data.totalCredits;
@@ -1011,7 +1083,8 @@ async function executeFileUpload() {
 
         renderExtractedData(
             result.extractedSubjects || [],
-            result.extractedText || ""
+            result.extractedText || "",
+            result.excludedSubjects || []
         );
 
         uploadProgressBar.style.width = "100%";
@@ -1027,7 +1100,8 @@ async function executeFileUpload() {
             uploadSuccessDetails.textContent =
                 `File "${result.fileName || selectedUploadFile.name}" ` +
                 `(${result.fileSize || "Size unavailable"}) uploaded successfully.` +
-                (result.filePath ? ` Saved at: ${result.filePath}` : "");
+                (result.filePath ? ` Saved at: ${result.filePath}.` : "") +
+                (result.message ? ` ${result.message}` : "");
 
         }, 500);
 
@@ -1072,8 +1146,22 @@ function readFileAsBase64(file) {
 // ==========================================
 // EXTRACTED DATA REVIEW
 // ==========================================
-function renderExtractedData(subjects, text) {
+function renderExtractedData(subjects, text, excluded = []) {
     extractedSubjectsBody.innerHTML = "";
+
+    // Note listing zero-credit subjects that were found but left out on purpose.
+    const extractionNote = document.getElementById("extractionNote");
+    if (extractionNote) {
+        if (Array.isArray(excluded) && excluded.length > 0) {
+            extractionNote.textContent =
+                "Excluded from GPA (0 credits): " +
+                excluded.map(item => `${item.name} (${item.grade})`).join(", ") + ".";
+            extractionNote.style.display = "block";
+        } else {
+            extractionNote.textContent = "";
+            extractionNote.style.display = "none";
+        }
+    }
 
     if (!Array.isArray(subjects) || subjects.length === 0) {
         extractedSubjectsBody.innerHTML = `
@@ -1095,6 +1183,7 @@ function renderExtractedData(subjects, text) {
                     <input
                         type="text"
                         class="extracted-name"
+                        aria-label="Subject ${index + 1} name"
                         value="${escapeHtml(item.name || "")}"
                         required
                     />
@@ -1104,6 +1193,7 @@ function renderExtractedData(subjects, text) {
                     <input
                         type="number"
                         class="extracted-credit"
+                        aria-label="Subject ${index + 1} credits"
                         min="0"
                         max="12"
                         step="1"
@@ -1113,7 +1203,7 @@ function renderExtractedData(subjects, text) {
                 </td>
 
                 <td>
-                    <select class="extracted-grade" required>
+                    <select class="extracted-grade" aria-label="Subject ${index + 1} grade" required>
                         <option value="">Select</option>
                         ${GRADES.map(grade =>
                             `<option value="${grade}" ${grade === item.grade ? "selected" : ""}>${grade}</option>`

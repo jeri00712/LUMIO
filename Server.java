@@ -14,6 +14,8 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -27,11 +29,54 @@ import java.util.regex.Pattern;
  */
 public class Server {
 
-    private static final int PORT = 8080;
+    // ---------------------------------------------------------------------------------
+    // Deployment configuration (all optional; the defaults keep local behaviour unchanged)
+    //   PORT                 port to listen on (Render sets this); falls back to 8080
+    //   LUMIO_DATA_DIR       folder for history.json                     (default: data)
+    //   LUMIO_UPLOAD_DIR     folder for uploaded marksheets              (default: uploads)
+    //   LUMIO_SAVE_UPLOADS   "false" = process PDFs in memory, never store them (default: true)
+    //   LUMIO_CORS_ORIGIN    allow one other website origin to call the API (default: none)
+    // ---------------------------------------------------------------------------------
+    private static final int DEFAULT_PORT = 8080;
+    private static final int PORT = resolvePort();
+    private static final String DATA_DIR = envOrDefault("LUMIO_DATA_DIR", "data");
+    private static final String UPLOAD_DIR = envOrDefault("LUMIO_UPLOAD_DIR", "uploads");
+    private static final boolean SAVE_UPLOADS = !"false".equalsIgnoreCase(envOrDefault("LUMIO_SAVE_UPLOADS", "true"));
+    private static final String CORS_ORIGIN = envOrDefault("LUMIO_CORS_ORIGIN", "");
+
+    private static String envOrDefault(String name, String fallback) {
+        String value = System.getenv(name);
+        return (value == null || value.trim().isEmpty()) ? fallback : value.trim();
+    }
+
+    /** Reads the PORT environment variable; uses 8080 when it is missing or not a valid port. */
+    private static int resolvePort() {
+        String raw = System.getenv("PORT");
+        if (raw == null || raw.trim().isEmpty()) return DEFAULT_PORT;
+        try {
+            int port = Integer.parseInt(raw.trim());
+            if (port >= 1 && port <= 65535) return port;
+        } catch (NumberFormatException ignored) { }
+        System.err.println("Ignoring invalid PORT value '" + raw + "'; using " + DEFAULT_PORT);
+        return DEFAULT_PORT;
+    }
+
+    /**
+     * The frontend is served by this same server, so it calls the API on its own origin and
+     * needs no CORS headers. They are only sent when LUMIO_CORS_ORIGIN is set.
+     */
+    private static void applyCors(HttpExchange exchange, String methods) {
+        if (CORS_ORIGIN.isEmpty()) return;
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", CORS_ORIGIN);
+        exchange.getResponseHeaders().set("Access-Control-Allow-Methods", methods);
+        exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
+        exchange.getResponseHeaders().set("Vary", "Origin");
+    }
 
     public static void main(String[] args) throws IOException {
-        // Create HTTP server listening on port 8080
-        HttpServer server = HttpServer.create(new InetSocketAddress(PORT), 0);
+        // Listen on ALL interfaces (0.0.0.0): a hosting platform such as Render reaches the
+        // container from outside, so binding to localhost only would not work there.
+        HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", PORT), 0);
 
         // 1. API routes: handle GPA, CGPA, Semester History, and File Uploads
         server.createContext("/api/calculate", new CalculateHandler());
@@ -42,15 +87,30 @@ public class Server {
         // Browsers request /favicon.ico automatically; answer it cleanly (404 if none exists).
         server.createContext("/favicon.ico", new FaviconHandler());
 
+        // Health check for hosting platforms: /healthz answers "ok" without touching any data.
+        server.createContext("/healthz", exchange -> {
+            byte[] ok = "ok".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=UTF-8");
+            exchange.sendResponseHeaders(200, ok.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(ok);
+            }
+        });
+
         // 2. Static file route: serves HTML, CSS, and JS to the browser
         server.createContext("/", new StaticFileHandler());
 
-        // Use default executor
-        server.setExecutor(null);
+        // A small thread pool so one slow request (e.g. a PDF being parsed) does not block everyone.
+        server.setExecutor(Executors.newFixedThreadPool(8));
+
+        // Stop cleanly when the platform sends SIGTERM (redeploys, restarts).
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> server.stop(1)));
 
         System.out.println("=================================================");
-        System.out.println("  GPA Calculator Web Server is running!");
-        System.out.println("  Open your browser and visit: http://localhost:" + PORT);
+        System.out.println("  LUMIO server is running on port " + PORT);
+        System.out.println("  Local:  http://localhost:" + PORT);
+        System.out.println("  Data folder:    " + new File(DATA_DIR).getAbsolutePath());
+        System.out.println("  Uploads:        " + (SAVE_UPLOADS ? new File(UPLOAD_DIR).getAbsolutePath() : "not stored (LUMIO_SAVE_UPLOADS=false)"));
         System.out.println("  Press Ctrl+C in terminal to stop.");
         System.out.println("=================================================");
 
@@ -64,9 +124,7 @@ public class Server {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             // Allow cross-origin requests & preflight
-            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-            exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "POST, OPTIONS");
-            exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
+            applyCors(exchange, "POST, OPTIONS");
 
             if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
                 exchange.sendResponseHeaders(204, -1);
@@ -258,9 +316,7 @@ public class Server {
     static class CalculateCgpaHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-            exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "POST, OPTIONS");
-            exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
+            applyCors(exchange, "POST, OPTIONS");
 
             if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
                 exchange.sendResponseHeaders(204, -1);
@@ -364,7 +420,7 @@ public class Server {
      * Handles /api/history (GET, POST, DELETE) for local server-side persistence in data/history.json
      */
     static class HistoryHandler implements HttpHandler {
-        private final File dataDir = new File("data");
+        private final File dataDir = new File(DATA_DIR);
         private final File historyFile = new File(dataDir, "history.json");
 
         public HistoryHandler() {
@@ -380,9 +436,7 @@ public class Server {
 
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-            exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-            exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
+            applyCors(exchange, "GET, POST, DELETE, OPTIONS");
 
             String method = exchange.getRequestMethod().toUpperCase();
 
@@ -485,19 +539,18 @@ public class Server {
      * Handles /api/upload (POST to save uploaded PDF / image files to uploads/)
      */
     static class UploadHandler implements HttpHandler {
-        private final File uploadsDir = new File("uploads");
+        private final File uploadsDir = new File(UPLOAD_DIR);
 
         public UploadHandler() {
-            if (!uploadsDir.exists()) {
+            // The folder is only needed when uploads are kept on the server.
+            if (SAVE_UPLOADS && !uploadsDir.exists()) {
                 uploadsDir.mkdirs();
             }
         }
 
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-            exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-            exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
+            applyCors(exchange, "GET, POST, OPTIONS");
 
             String method = exchange.getRequestMethod().toUpperCase();
 
@@ -507,6 +560,10 @@ public class Server {
             }
 
             if ("GET".equals(method)) {
+                if (!SAVE_UPLOADS) {
+                    sendJsonResponse(exchange, 200, "[]"); // nothing is stored, so nothing is listed
+                    return;
+                }
                 File[] files = uploadsDir.listFiles();
                 StringBuilder sb = new StringBuilder("[");
                 if (files != null) {
@@ -544,7 +601,7 @@ public class Server {
                 }
 
                 String safeName = fileName.replaceAll("[^a-zA-Z0-9._-]", "_");
-                String uniqueFileName = System.currentTimeMillis() + "_" + safeName;
+                String uniqueFileName = System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 6) + "_" + safeName;
                 File targetFile = new File(uploadsDir, uniqueFileName);
 
                 byte[] fileBytes;
@@ -574,7 +631,10 @@ public class Server {
                     return;
                 }
 
-                Files.write(targetFile.toPath(), fileBytes);
+                // LUMIO_SAVE_UPLOADS=false: the PDF is read from memory and never written to disk.
+                if (SAVE_UPLOADS) {
+                    Files.write(targetFile.toPath(), fileBytes);
+                }
 
                 String fileType = safeName.contains(".") ? safeName.substring(safeName.lastIndexOf(".") + 1).toLowerCase() : "unknown";
                 long sizeKb = Math.max(1, fileBytes.length / 1024);
@@ -625,7 +685,11 @@ public class Server {
                 }
 
                 if (!"pdf".equals(fileType)) {
-                    message = "File saved. Subjects can only be read automatically from PDF marksheets; enter image-based marks manually.";
+                    message = "File received. Subjects can only be read automatically from PDF marksheets; enter image-based marks manually.";
+                }
+
+                if (!SAVE_UPLOADS) {
+                    message += " The file was processed in memory and is not stored on the server.";
                 }
 
                 StringBuilder subjectJson = new StringBuilder("[");
@@ -667,7 +731,7 @@ public class Server {
                     + "\"fileName\":\"" + escapeJson(safeName) + "\","
                     + "\"fileType\":\"" + escapeJson(fileType) + "\","
                     + "\"fileSize\":\"" + sizeKb + " KB\","
-                    + "\"filePath\":\"uploads/" + escapeJson(targetFile.getName()) + "\","
+                    + "\"filePath\":\"" + (SAVE_UPLOADS ? "uploads/" + escapeJson(targetFile.getName()) : "") + "\","
                     + "\"extractedText\":\"" + escapeJson(extractedText) + "\","
                     + "\"extractedSubjects\":" + subjectJson + ","
                     + "\"excludedSubjects\":" + excludedJson + ","

@@ -1,0 +1,28 @@
+# Optional Render Blueprint. You can also create the service by hand in the dashboard
+# (New > Web Service > connect the repo > Runtime: Docker) and set the same values there.
+services:
+  - type: web
+    name: lumio
+    runtime: docker
+    plan: free              # free instances have NO persistent disk and sleep when idle
+    healthCheckPath: /healthz
+    envVars:
+      - key: LUMIO_SAVE_UPLOADS
+        value: "false"        # do not store uploaded marksheets
+
+    # --- To keep semester history across deploys (needs a PAID plan) ---
+    # 1. change plan above to a paid plan (e.g. starter)
+    # 2. uncomment the disk below and the two LUMIO_DATA_DIR / LUMIO_UPLOAD_DIR variables
+    #
+    # disk:
+    #   name: lumio-data
+    #   mountPath: /var/data
+    #   sizeGB: 1
+    #
+    # envVars (add to the list above):
+    #   - key: LUMIO_DATA_DIR
+    #     value: /var/data/history
+    #   - key: LUMIO_UPLOAD_DIR
+    #     value: /var/data/uploads
+    #   - key: LUMIO_SAVE_UPLOADS
+    #     value: "true"         # only if you really want to keep uploaded PDFs

@@ -1,0 +1,14 @@
+.git
+.gitignore
+.idea
+.vscode
+.env
+.env.*
+*.class
+uploads
+data
+README.md
+LICENSE
+Dockerfile
+.dockerignore
+render.yaml

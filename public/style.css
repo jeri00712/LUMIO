@@ -1,6 +1,6 @@
 :root {
-    --primary: #3b82f6;
-    --primary-hover: #2563eb;
+    --primary: #2563eb; /* darker blue: white text on it now meets WCAG AA (5.2:1) */
+    --primary-hover: #1d4ed8;
     --primary-light: #eff6ff;
     --bg-main: #f8fafc;
     --card-bg: #ffffff;
@@ -863,5 +863,54 @@ input:focus, select:focus {
 @media (max-width: 760px) {
     .tab-nav {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+
+/* ==========================================
+   ACCESSIBILITY ADDITIONS
+   ========================================== */
+.skip-link {
+    position: absolute;
+    left: 12px;
+    top: -48px;
+    z-index: 100;
+    padding: 10px 16px;
+    background: var(--text-main);
+    color: #ffffff;
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    transition: top 0.15s ease;
+}
+.skip-link:focus { top: 12px; }
+
+/* Visible keyboard focus for every interactive element */
+:focus-visible {
+    outline: 3px solid var(--primary);
+    outline-offset: 2px;
+}
+input:focus-visible, select:focus-visible {
+    outline: 3px solid var(--primary);
+    outline-offset: 1px;
+}
+h3[tabindex="-1"]:focus { outline: none; }
+
+.info-note {
+    margin: 12px 0;
+    padding: 10px 14px;
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--primary);
+    border-radius: var(--radius-sm);
+    background: var(--primary-light);
+    color: var(--text-main);
+    font-size: 0.9rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
     }
 }
