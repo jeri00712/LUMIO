@@ -104,6 +104,7 @@ body {
 
 /* Tab Navigation */
 .tab-nav {
+    position: relative;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 6px;
@@ -117,6 +118,8 @@ body {
 }
 
 .tab-btn {
+    position: relative;
+    z-index: 1;
     width: 100%;
     min-width: 0;
     display: inline-flex;
@@ -914,3 +917,86 @@ h3[tabindex="-1"]:focus { outline: none; }
         scroll-behavior: auto !important;
     }
 }
+
+
+/* ==========================================
+   TAB ANIMATIONS & CHANGING GRAPHICS
+   ========================================== */
+
+/* Sliding highlight (replaces the white "active" background once JS has positioned it) */
+.tab-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+    background: #ffffff;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-sm);
+    pointer-events: none;
+    transition: transform 0.4s cubic-bezier(0.34, 1.35, 0.5, 1),
+                width 0.3s ease, height 0.3s ease;
+}
+.tab-nav.tabs-ready .tab-btn.active {
+    background: transparent;
+    box-shadow: none;
+}
+
+/* Panel entrance: slide in from the side of the new tab, then the cards rise in one by one */
+@keyframes tabSlideIn {
+    from { opacity: 0; transform: translateX(var(--tab-shift, 28px)); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes riseIn {
+    from { opacity: 0; transform: translateY(18px) scale(0.985); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.tab-enter {
+    animation: tabSlideIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.tab-enter > * {
+    animation: riseIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.tab-enter > *:nth-child(2) { animation-delay: 0.08s; }
+.tab-enter > *:nth-child(3) { animation-delay: 0.16s; }
+.tab-enter > *:nth-child(4) { animation-delay: 0.24s; }
+.tab-enter > *:nth-child(5) { animation-delay: 0.32s; }
+.tab-enter > *:nth-child(n+6) { animation-delay: 0.4s; }
+
+/* History cards pop in one after another (delay is set from JS) */
+.history-card { animation: riseIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+
+/* Upload tab: floating icon, and a ring that pulses while a file is dragged over the box */
+@keyframes floatIcon {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
+}
+@keyframes ringPulse {
+    0%   { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45); }
+    100% { box-shadow: 0 0 0 18px rgba(37, 99, 235, 0); }
+}
+.dropzone-icon { display: inline-block; animation: floatIcon 3s ease-in-out infinite; }
+.dropzone.dragover { animation: ringPulse 1s ease-out infinite; }
+
+/* Background glow that changes colour with the selected tab (see applyTabTheme in app.js) */
+@property --glow-a { syntax: '<color>'; inherits: true; initial-value: rgba(37, 99, 235, 0.16); }
+@property --glow-b { syntax: '<color>'; inherits: true; initial-value: rgba(99, 102, 241, 0.14); }
+@keyframes glowDrift {
+    0%   { transform: translate3d(0, 0, 0) scale(1); }
+    100% { transform: translate3d(3%, 4%, 0) scale(1.08); }
+}
+body::before {
+    content: "";
+    position: fixed;
+    inset: -10%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+        radial-gradient(circle at 15% 12%, var(--glow-a) 0, transparent 42%),
+        radial-gradient(circle at 85% 78%, var(--glow-b) 0, transparent 45%);
+    transition: --glow-a 0.9s ease, --glow-b 0.9s ease;
+    animation: glowDrift 14s ease-in-out infinite alternate;
+}
+body[data-tab="gpa"]     { --glow-a: rgba(37, 99, 235, 0.16);  --glow-b: rgba(99, 102, 241, 0.14); }
+body[data-tab="cgpa"]    { --glow-a: rgba(16, 185, 129, 0.16); --glow-b: rgba(20, 184, 166, 0.14); }
+body[data-tab="history"] { --glow-a: rgba(245, 158, 11, 0.17); --glow-b: rgba(249, 115, 22, 0.13); }
+body[data-tab="upload"]  { --glow-a: rgba(139, 92, 246, 0.17); --glow-b: rgba(236, 72, 153, 0.13); }

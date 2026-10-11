@@ -86,6 +86,12 @@ const useExtractedDataBtn = document.getElementById("useExtractedDataBtn");
 // ==========================================
 // INITIALIZATION
 // ==========================================
+window.addEventListener("resize", positionTabIndicator);
+window.addEventListener("load", positionTabIndicator);
+if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(positionTabIndicator);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     initTabs();
     initGpaCalculator();
@@ -146,7 +152,50 @@ function focusResultsHeading(section) {
     }
 }
 
+const TAB_ORDER = ["gpa", "cgpa", "history", "upload"];
+let currentTab = null;
+
+// Sliding highlight behind the active tab button.
+function positionTabIndicator() {
+    const nav = document.querySelector(".tab-nav");
+    if (!nav) return;
+    const active = nav.querySelector(".tab-btn.active");
+    let indicator = nav.querySelector(".tab-indicator");
+    if (!active) return;
+
+    if (!indicator) {
+        indicator = document.createElement("span");
+        indicator.className = "tab-indicator";
+        indicator.setAttribute("aria-hidden", "true");
+        nav.insertBefore(indicator, nav.firstChild);
+    }
+
+    indicator.style.width = active.offsetWidth + "px";
+    indicator.style.height = active.offsetHeight + "px";
+    indicator.style.transform = `translate(${active.offsetLeft}px, ${active.offsetTop}px)`;
+    nav.classList.add("tabs-ready");
+}
+
+// Page graphics: the background colour glow changes with the selected tab.
+function applyTabTheme(tab) {
+    document.body.dataset.tab = tab;
+}
+
+// Panel entrance: slides in from the side the new tab lies on, then its cards rise one by one.
+function animateTabPanel(panel, direction) {
+    if (!panel) return;
+    panel.style.setProperty("--tab-shift", direction * 28 + "px");
+    panel.classList.remove("tab-enter");
+    void panel.offsetWidth; // restart the animation if the same panel is shown again
+    panel.classList.add("tab-enter");
+    clearTimeout(panel._tabEnterTimer);
+    panel._tabEnterTimer = setTimeout(() => panel.classList.remove("tab-enter"), 1100);
+}
+
 function switchTab(tab) {
+    const previousTab = currentTab;
+    currentTab = tab;
+
     if (tabGpaBtn) tabGpaBtn.classList.toggle("active", tab === "gpa");
     if (tabCgpaBtn) tabCgpaBtn.classList.toggle("active", tab === "cgpa");
     if (tabHistoryBtn) tabHistoryBtn.classList.toggle("active", tab === "history");
@@ -178,6 +227,20 @@ function switchTab(tab) {
 
     if (tab === "history") {
         loadHistory();
+    }
+
+    // Animations (skipped on the very first render and when the tab did not change).
+    applyTabTheme(tab);
+    positionTabIndicator();
+    if (previousTab !== null && previousTab !== tab) {
+        const panels = {
+            gpa: gpaTabSection,
+            cgpa: cgpaTabSection,
+            history: historyTabSection,
+            upload: uploadTabSection
+        };
+        const direction = TAB_ORDER.indexOf(tab) > TAB_ORDER.indexOf(previousTab) ? 1 : -1;
+        animateTabPanel(panels[tab], direction);
     }
 }
 
@@ -667,7 +730,12 @@ function initHistory() {
     }
 }
 
-async function handleSaveGpaToHistory() {
+// ------------------------------------------------------------------
+// SEMESTER HISTORY - stored in THIS browser only (localStorage).
+// Every visitor of a public site therefore has a private history; nothing is shared through
+// the server. (The /api/history endpoints still exist on the server but are no longer used.)
+// ------------------------------------------------------------------
+function handleSaveGpaToHistory() {
     if (!lastCalculatedGpaResult) {
         alert("Please calculate your GPA first before saving to history.");
         return;
@@ -675,7 +743,7 @@ async function handleSaveGpaToHistory() {
 
     const title =
         semesterSaveTitle.value.trim() ||
-        `Semester ${savedHistoryRecords.length + 1}`;
+        `Semester ${getFromLocalStorage().length + 1}`;
 
     const dateStr = new Date().toLocaleDateString("en-US", {
         month: "short",
@@ -693,56 +761,22 @@ async function handleSaveGpaToHistory() {
         subjects: lastCalculatedGpaResult.subjects
     };
 
-    saveGpaToHistoryBtn.disabled = true;
-    saveGpaToHistoryBtn.textContent = "Saving...";
+    if (!saveToLocalStorage(record)) {
+        alert("Could not save: your browser is blocking local storage (private mode or storage full).");
+        return;
+    }
 
-    try {
-        const response = await fetch("/api/history", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(record)
-        });
+    alert(`✅ "${title}" saved to the Semester History on this device!`);
 
-        if (!response.ok) {
-            throw new Error("Failed to save record on server.");
-        }
+    const match = title.match(/(\d+)/);
 
-        alert(`✅ "${title}" successfully saved to your Semester History!`);
-
-        const match = title.match(/(\d+)/);
-
-        if (match) {
-            semesterSaveTitle.value = `Semester ${Number(match[1]) + 1}`;
-        }
-
-    } catch (error) {
-        console.error("Save history error:", error);
-        saveToLocalStorage(record);
-        alert(`✅ "${title}" saved to local storage!`);
-
-    } finally {
-        saveGpaToHistoryBtn.disabled = false;
-        saveGpaToHistoryBtn.textContent = "💾 Save to Semester History";
+    if (match) {
+        semesterSaveTitle.value = `Semester ${Number(match[1]) + 1}`;
     }
 }
 
-async function loadHistory() {
-    historySummaryText.textContent = "Loading archives...";
-
-    try {
-        const response = await fetch("/api/history");
-
-        if (!response.ok) {
-            throw new Error("Could not fetch history.");
-        }
-
-        savedHistoryRecords = await response.json();
-
-    } catch (error) {
-        console.warn("Using local history storage:", error);
-        savedHistoryRecords = getFromLocalStorage();
-    }
-
+function loadHistory() {
+    savedHistoryRecords = getFromLocalStorage();
     renderHistoryUI(savedHistoryRecords);
 }
 
@@ -752,7 +786,7 @@ function renderHistoryUI(records) {
     if (!records || records.length === 0) {
         historyEmptyState.style.display = "block";
         historyCardsContainer.style.display = "none";
-        historySummaryText.textContent = "0 saved semesters in database";
+        historySummaryText.textContent = "0 saved semesters on this device";
         return;
     }
 
@@ -776,9 +810,10 @@ function renderHistoryUI(records) {
     historySummaryText.textContent =
         `${records.length} Semester(s) Saved • Overall CGPA: ${averageCgpa} • Total Credits: ${totalCredits}`;
 
-    records.forEach(item => {
+    records.forEach((item, index) => {
         const card = document.createElement("div");
         card.className = "history-card";
+        card.style.animationDelay = Math.min(index, 8) * 60 + "ms";
 
         const subjectTags = (item.subjects || []).map(subject =>
             `<span class="sub-tag">${escapeHtml(subject.name)} (${escapeHtml(subject.grade)})</span>`
@@ -840,47 +875,29 @@ function loadSemesterIntoGpa(item) {
     alert(`Loaded "${item.title}" into the Semester GPA Calculator!`);
 }
 
-async function handleDeleteHistoryRecord(id) {
+function handleDeleteHistoryRecord(id) {
     if (!confirm("Are you sure you want to delete this semester record?")) {
         return;
     }
 
-    try {
-        const response = await fetch(
-            `/api/history?id=${encodeURIComponent(id)}`,
-            { method: "DELETE" }
-        );
-
-        if (!response.ok) {
-            throw new Error("Server delete failed.");
-        }
-
-    } catch (error) {
-        deleteFromLocalStorage(id);
-    }
-
+    deleteFromLocalStorage(id);
     loadHistory();
 }
 
-async function handleClearAllHistory() {
+function handleClearAllHistory() {
     if (savedHistoryRecords.length === 0) {
         alert("History is already empty.");
         return;
     }
 
-    if (!confirm("Are you sure you want to delete ALL saved semester records?")) {
+    if (!confirm("Are you sure you want to delete ALL saved semester records on this device?")) {
         return;
     }
 
     try {
-        const response = await fetch("/api/history", { method: "DELETE" });
-
-        if (!response.ok) {
-            throw new Error("Server clear failed.");
-        }
-
+        localStorage.removeItem(HISTORY_STORAGE_KEY);
     } catch (error) {
-        localStorage.removeItem("gpa_history");
+        console.error("Could not clear history:", error);
     }
 
     loadHistory();
@@ -906,23 +923,38 @@ function handleSyncHistoryToCgpa() {
     handleCgpaFormSubmit();
 }
 
+const HISTORY_STORAGE_KEY = "gpa_history";
+
 function getFromLocalStorage() {
     try {
-        return JSON.parse(localStorage.getItem("gpa_history") || "[]");
+        const parsed = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY) || "[]");
+        return Array.isArray(parsed)
+            ? parsed.filter(record => record && typeof record === "object")
+            : [];
     } catch {
         return [];
     }
 }
 
+// Returns true when the records were stored, false when the browser refused (private mode, quota).
+function writeHistory(records) {
+    try {
+        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(records));
+        return true;
+    } catch (error) {
+        console.error("History storage error:", error);
+        return false;
+    }
+}
+
 function saveToLocalStorage(record) {
     const records = getFromLocalStorage();
-    records.unshift(record);
-    localStorage.setItem("gpa_history", JSON.stringify(records));
+    records.unshift(record); // newest first
+    return writeHistory(records);
 }
 
 function deleteFromLocalStorage(id) {
-    const records = getFromLocalStorage().filter(record => record.id !== id);
-    localStorage.setItem("gpa_history", JSON.stringify(records));
+    return writeHistory(getFromLocalStorage().filter(record => record.id !== id));
 }
 
 // ==========================================
